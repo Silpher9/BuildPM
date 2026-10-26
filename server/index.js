@@ -126,7 +126,9 @@ get('/api/note', (req) => {
 get('/api/design', () =>
   cached('design', () => ({
     rooms: D.rooms(vault),
-    images: D.images(vault),
+    roomsNote: config.files.rooms,
+    roomsWarning: D.noteWarning(vault, config.files.rooms),
+    sets: D.imageSets(vault),
     notes: vault.idx.notes.filter((n) => n.folder.startsWith('02_Design') && !n.archived).map(D.noteSummary),
   })),
 )

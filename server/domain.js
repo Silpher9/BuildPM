@@ -569,6 +569,15 @@ export function work(vault) {
 
 // ---------------------------------------------------------------- rooms & images
 
+/** First `> [!warning]` callout of a note, as plain text. */
+export function noteWarning(vault, rel) {
+  const text = safeRead(vault, rel) || ''
+  const m = text.match(/^> \[!warning\]\s*([^\n]*)\n((?:>.*\n?)*)/m)
+  if (!m) return null
+  const body = m[2].replace(/^>\s?/gm, '').trim()
+  return html(vault, `**${m[1].trim()}.** ${body}`)
+}
+
 export function rooms(vault) {
   const text = safeRead(vault, F.rooms)
   if (!text) return []
@@ -619,9 +628,46 @@ export function images(vault) {
       folder: a.path.slice(0, a.path.lastIndexOf('/')),
       name: a.path.split('/').pop(),
       date: datesIn(a.path)[0] || null,
-      render: a.path.startsWith(config.rendersDir),
+      design: a.path.startsWith('02_Design/'),
     }))
     .sort((a, b) => (b.date || '').localeCompare(a.date || '') || a.path.localeCompare(b.path))
+}
+
+/** Images grouped per folder, with the note that shows them and whether the set is superseded. */
+export function imageSets(vault) {
+  const groups = new Map()
+  for (const img of images(vault)) {
+    if (!groups.has(img.folder)) groups.set(img.folder, [])
+    groups.get(img.folder).push(img)
+  }
+  const notes = vault.idx.notes.filter((n) => !n.archived)
+  return [...groups.entries()]
+    .map(([folder, imgs]) => {
+      const readme = vault.idx.byPath.get(folder + '/README.md')
+      const names = new Set(imgs.map((i) => i.name))
+      const note =
+        notes.find((n) => n.path !== readme?.path && [...n.body.matchAll(/!\[\[([^\]|#]+)/g)].some((m) => names.has(m[1].split('/').pop()))) || readme
+      const status = readme?.fm.status || note?.fm.status || null
+      return {
+        folder,
+        title: folder.startsWith('02_Design')
+          ? note?.title || readme?.title || folderLabel(folder)
+          : `Foto’s · ${folderLabel(folder.replace(/\/(assets|bronnen)$/, ''))}`,
+        note: note ? { path: note.path, title: note.title } : null,
+        date:
+          datesIn(folder)[0] ||
+          imgs
+            .map((i) => i.date)
+            .filter(Boolean)
+            .sort()
+            .pop() ||
+          null,
+        design: folder.startsWith('02_Design'),
+        superseded: status === 'superseded' || status === 'archived',
+        images: imgs.sort((a, b) => a.name.localeCompare(b.name)),
+      }
+    })
+    .sort((a, b) => a.superseded - b.superseded || b.design - a.design || (b.date || '').localeCompare(a.date || ''))
 }
 
 // ---------------------------------------------------------------- knowledge base
@@ -753,8 +799,10 @@ export function overview(vault) {
     questions: qs.length,
     blockers: blk.rows.filter((r) => r.open).length,
     notes: vault.idx.notes.filter((n) => !n.archived).length,
-    renders: pics.filter((p) => p.render).length,
-    photos: pics.filter((p) => !p.render).length,
+    renders: imageSets(vault)
+      .filter((s) => s.design && !s.superseded)
+      .reduce((n, s) => n + s.images.length, 0),
+    photos: pics.filter((p) => !p.design).length,
     rooms: rooms(vault).length,
     lastLog: log.entries[0]?.date || null,
     logEntries: log.entries.length,

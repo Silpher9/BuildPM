@@ -1,19 +1,50 @@
 import { useState } from 'react'
-import { PageHead, Gate, Dim, Empty, useLightbox } from '../components/ui.jsx'
+import { Link } from 'wouter'
+import { PageHead, Gate, Dim, Empty, NoteHtml, useLightbox } from '../components/ui.jsx'
 import { NoteRow } from './Knowledge.jsx'
 import { useApi } from '../lib/api.js'
-import { fileUrl, shortDate } from '../lib/format.js'
+import { fileUrl, shortDate, noteHref } from '../lib/format.js'
 
-function caption(img) {
+function caption(img, withDate) {
   const base = img.name
     .split('---')[0]
     .replace(/\.\w+$/, '')
     .replace(/^\d{4}-\d{2}-\d{2}_?/, '')
     .replace(/_/g, ' ')
-  return img.date ? `${shortDate(img.date)} · ${base}` : base
+  return withDate && img.date ? `${shortDate(img.date)} · ${base}` : base
 }
 
-function Gallery({ images }) {
+function ImageSet({ set }) {
+  const [open, setOpen] = useState(!set.superseded)
+  return (
+    <section>
+      <Dim
+        count={set.images.length}
+        right={
+          set.note && (
+            <Link href={noteHref(set.note.path)} className="label">
+              notitie →
+            </Link>
+          )
+        }
+      >
+        {set.title}
+        {set.date ? ` · ${shortDate(set.date, true)}` : ''}
+      </Dim>
+      {set.superseded && (
+        <p className="chips" style={{ alignItems: 'center', margin: '-4px 0 12px' }}>
+          <span className="chip brick">Verouderd</span>
+          <button className="more-btn label" onClick={() => setOpen((o) => !o)}>
+            {open ? '− verbergen' : '+ toon de oude beelden'}
+          </button>
+        </p>
+      )}
+      {open && <Gallery images={set.images} withDate={!set.date} />}
+    </section>
+  )
+}
+
+function Gallery({ images, withDate = true }) {
   const open = useLightbox()
   const paths = images.map((i) => i.path)
   return (
@@ -21,7 +52,7 @@ function Gallery({ images }) {
       {images.map((img, i) => (
         <button key={img.path} onClick={() => open(paths, i)} aria-label={`Open ${img.name}`}>
           <img src={fileUrl(img.path, 480)} alt={img.name} loading="lazy" />
-          <span className="cap">{caption(img)}</span>
+          <span className="cap">{caption(img, withDate)}</span>
         </button>
       ))}
     </div>
@@ -96,23 +127,28 @@ export default function Design() {
         no="08"
         title="Ontwerp"
         crumbs={[{ label: 'Ontwerp' }]}
-        lede="De geannoteerde renders zijn de werkbasis; de foto’s laten de huidige toestand zien. Het ruimteboek houdt per kamer bij waar het op moet letten."
+        lede="Het actuele ontwerpmodel, ook in de gescande schuur, met daaronder de bestaande toestand. Het ruimteboek houdt per kamer bij waar het op moet letten."
       />
       <Gate state={state}>
         {(d) => {
-          const renders = d.images.filter((i) => i.render)
-          const photos = d.images.filter((i) => !i.render)
           return (
             <>
-              <Dim count={renders.length}>Renders</Dim>
-              {renders.length ? <Gallery images={renders} /> : <Empty>Geen renders gevonden.</Empty>}
-              {photos.length > 0 && (
-                <>
-                  <Dim count={photos.length}>Foto’s uit de vault</Dim>
-                  <Gallery images={photos} />
-                </>
+              {d.sets.length ? d.sets.map((s) => <ImageSet key={s.folder} set={s} />) : <Empty>Geen beelden gevonden.</Empty>}
+              <Dim
+                count={d.rooms.length}
+                right={
+                  <Link href={noteHref(d.roomsNote)} className="label">
+                    notitie →
+                  </Link>
+                }
+              >
+                Ruimteboek
+              </Dim>
+              {d.roomsWarning && (
+                <div className="error-box" style={{ borderLeftColor: 'var(--mark)', background: 'var(--mark-soft)', marginBottom: 12 }}>
+                  <NoteHtml html={d.roomsWarning} className="" />
+                </div>
               )}
-              <Dim count={d.rooms.length}>Ruimteboek</Dim>
               <div className="grid-cards">
                 {d.rooms.map((r) => (
                   <Room key={r.n} r={r} />

@@ -46,7 +46,6 @@ export const config = {
     rooms: '02_Design/07_Ruimteboek_Per_Kamer_2026-03-13.md',
   },
   assetsDir: '03_Projectmanagement/assets',
-  rendersDir: '02_Design/2026-03-13_Annotated_House_Renders',
 
   // How the six management chapters map onto the vault.
   chapters: {
