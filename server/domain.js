@@ -9,7 +9,7 @@ import { parseTasks } from './md/tasks.js'
 import { parseQuestions } from './md/questions.js'
 import { renderNote, renderInline } from './md/render.js'
 import { wikilinksIn } from './md/wikilinks.js'
-import { today, daysBetween, latestDate, datesIn, fold, plain, hash } from './util.js'
+import { today, daysBetween, latestDate, datesIn, fold, plain, hash, slugify } from './util.js'
 
 const F = config.files
 
@@ -57,7 +57,12 @@ function resolveLinks(vault, text) {
     const hit = vault.idx.resolve(l.target)
     if (!hit || seen.has(hit.path) || !hit.path.endsWith('.md')) continue
     seen.add(hit.path)
-    out.push({ path: hit.path, title: vault.idx.byPath.get(hit.path)?.title || hit.path, label: l.alias || l.target.split('/').pop() })
+    out.push({
+      path: hit.path,
+      heading: l.heading || null,
+      title: vault.idx.byPath.get(hit.path)?.title || hit.path,
+      label: l.alias || l.target.split('/').pop(),
+    })
   }
   return out
 }
@@ -434,7 +439,11 @@ export function logbook(vault) {
         .map((l) => vault.idx.resolve(l.target)?.path)
         .filter(Boolean)
       const textOnly = e.raw.replace(/!\[\[[^\]]+\]\]/g, '').trim()
-      return { ...e, text: textOnly, html: html(vault, textOnly), images, links: resolveLinks(vault, textOnly), id: hash(e.date + e.line + e.raw) }
+      const targets = wikilinksIn(textOnly)
+        .filter((l) => !l.embed)
+        .map((l) => ({ path: vault.idx.resolve(l.target)?.path, heading: l.heading }))
+        .filter((t) => t.path)
+      return { ...e, text: textOnly, html: html(vault, textOnly), images, links: resolveLinks(vault, textOnly), targets, id: hash(e.date + e.line + e.raw) }
     }),
   }
 }
@@ -735,8 +744,32 @@ export function note(vault, rel) {
   if (!n) return null
   const text = vault.read(rel)
   const { body, bodyLine } = splitFrontmatter(text)
-  const { html: bodyHtml, headings } = renderNote(body, { resolve: vault.idx.resolve, lineOffset: bodyLine, lines: text.split('\n'), readOnly: n.archived })
+  // Log entries that point at this note (or at one of its sections) are shown with it.
+  const log = rel === F.logbook ? [] : logbook(vault).entries.filter((e) => e.targets.some((t) => t.path === rel))
+  const sectionPhotos = {}
+  for (const e of log) {
+    for (const t of e.targets) {
+      if (t.path !== rel || !t.heading || !e.images.length) continue
+      const slug = slugify(t.heading, 80)
+      ;(sectionPhotos[slug] ||= []).push({ date: e.date, time: e.time, images: e.images })
+    }
+  }
+  const { html: bodyHtml, headings } = renderNote(body, {
+    resolve: vault.idx.resolve,
+    lineOffset: bodyLine,
+    lines: text.split('\n'),
+    readOnly: n.archived,
+    sectionPhotos,
+  })
   return {
+    log: log.map((e) => ({
+      id: e.id,
+      date: e.date,
+      time: e.time,
+      html: e.html,
+      images: e.images,
+      heading: e.targets.find((t) => t.path === rel)?.heading || null,
+    })),
     ...noteSummary(n),
     fm: n.fm,
     html: bodyHtml,

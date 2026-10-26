@@ -120,7 +120,7 @@ export default function TaskCard({ card, lanes = [], showLane = false, flash = f
             <Icon name="book" size={16} /> Tekst aanpassen
           </button>
           {card.links.map((l) => (
-            <Link key={l.path} href={noteHref(l.path)} onClick={() => setMenu(false)}>
+            <Link key={l.path} href={noteHref(l.path, l.heading)} onClick={() => setMenu(false)}>
               <Icon name="link" size={16} /> {l.label.replace(/_/g, ' ')}
             </Link>
           ))}

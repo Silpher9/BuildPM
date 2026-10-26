@@ -269,3 +269,43 @@ describe('kanban since stamps', () => {
     expect(out).toContain('- [ ] Tweede taak.\n')
   })
 })
+
+describe('fill-in fields and section photos', () => {
+  it('renders placeholders as inputs that point at their line', async () => {
+    const { hash } = await import('../server/util.js')
+    const text = '# T\n\n## 1. Breedte\n\n- A: ____ cm, B: ____ cm\n\n[📷 Foto maken](buildpm:foto)\n'
+    const lines = text.split('\n')
+    const resolve = makeResolver([{ path: 'img/x.jpg' }], { projectDir: 'p', isArchived: () => false })
+    const { html } = renderNote(text, { resolve, lines, sectionPhotos: { '1-breedte': [{ date: '2026-01-01', images: ['img/x.jpg'] }] } })
+    expect(html).toContain(`data-line="4" data-line-hash="${hash(lines[4])}" data-idx="0"`)
+    expect(html).toContain('data-idx="1"')
+    expect(html).toContain('data-photo-heading="1. Breedte"')
+    expect(html).toContain('img%2Fx.jpg')
+  })
+  it('gives number fields a numeric keyboard and text fields a normal one', () => {
+    const resolve = makeResolver([], { projectDir: 'p', isArchived: () => false })
+    const field = (line) => renderNote(`- ${line}\n`, { resolve, lines: [`- ${line}`] }).html.match(/<input[^>]*class="fill[^"]*"[^>]*>/g)
+    expect(field('A: ____ cm')[0]).toContain('inputmode="decimal"')
+    expect(field('P2: ____ (+0,5)')[0]).toContain('inputmode="decimal"')
+    expect(field('Aantal: ____ · verwacht 6')[0]).toContain('inputmode="decimal"')
+    expect(field('Maat: ____ × ____ cm').every((f) => f.includes('inputmode="decimal"'))).toBe(true)
+    expect(field('Staat: ____')[0]).not.toContain('inputmode')
+    expect(field('Aanwezig (ja/nee): ____')[0]).not.toContain('inputmode')
+  })
+  it('numbers fields across the cells of one table row', async () => {
+    const { hash } = await import('../server/util.js')
+    const text = '| Rij | A | B |\n|---|---|---|\n| 1 | P1: ____ (+0,5) | P2: ____ (+1) |\n'
+    const lines = text.split('\n')
+    const resolve = makeResolver([], { projectDir: 'p', isArchived: () => false })
+    const { html } = renderNote(text, { resolve, lines })
+    expect(html).toContain(`data-line="2" data-line-hash="${hash(lines[2])}" data-idx="0"`)
+    expect(html).toContain(`data-line="2" data-line-hash="${hash(lines[2])}" data-idx="1"`)
+  })
+  it('writes a value into the n-th placeholder only', async () => {
+    const { fillField } = await import('../server/actions.js')
+    const { hash } = await import('../server/util.js')
+    const text = 'x\n- A: ____ cm, B: ____ cm\n'
+    const out = fillField(text, { line: 1, lineHash: hash('- A: ____ cm, B: ____ cm'), idx: 1, value: '655' })
+    expect(out).toBe('x\n- A: ____ cm, B: **655** cm\n')
+  })
+})

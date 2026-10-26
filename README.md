@@ -28,6 +28,8 @@ Bouwdashboard bovenop een Obsidian-vault. De vault blijft de enige bron van waar
 - **Eén antwoord, twee plekken.** Een beantwoorde vraag wordt in haar notitie gemarkeerd en komt als besluit in het besluitenlog.
 - **Rondje bouw.** Eén keer per week: klopt *Nu* nog, nieuws van buiten, één vraag, één logregel, peildatum bevestigen.
 - **Versheid.** Notities met een oude `reviewed`-datum krijgen een markering; "klopt nog" werkt die bij.
+- **Werkkaarten met invulvakjes.** `____` in een notitie wordt een invulvak. Wat je op de bouw invult, komt als `**waarde**` op die plek in de notitie. Een vak gevolgd door een eenheid of verwachting (`cm`, `×`, `(+0,5)`, `· verwacht 6`) krijgt een cijfertoetsenbord. Invulvakjes werken ook in tabellen.
+- **Foto's vanaf de bouw.** De cameraknop bovenin opent direct de camera van de telefoon. `[📷 Foto maken](buildpm:foto)` in een notitie maakt een knop voor die sectie. De foto komt in het logboek met `→ [[Notitie#Kop]]` en verschijnt daarna onder die sectie.
 - **Ongedaan maken.** Elke wijziging kan direct terug. Vorige versies blijven bewaard in `.data/history` (buiten de vault).
 - **Live.** Wijzigingen in de vault (Obsidian, agents) verschijnen meteen in elk open dashboard.
 - **Vault-hygiëne.** Na een wijziging draait het manifest-script van de vault automatisch (als het bestaat).

@@ -58,8 +58,21 @@ export const SECTIONS = [
   { href: '/voorraad', no: '10', title: 'Voorraad & kosten', desc: 'Materiaal, bestellingen en uitgaven' },
 ]
 
-export function noteHref(path) {
-  return '/n/' + path.split('/').map(encodeURIComponent).join('/')
+/** Same as the server's slugify: heading text -> anchor id. */
+export function slugify(text, max = 80) {
+  const full = String(text)
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+  let s = full.slice(0, max)
+  if (full.length > max && full[max] !== '-' && s.includes('-')) s = s.slice(0, s.lastIndexOf('-'))
+  return s.replace(/-+$/g, '') || 'item'
+}
+
+export function noteHref(path, heading) {
+  return '/n/' + path.split('/').map(encodeURIComponent).join('/') + (heading ? '#' + slugify(heading) : '')
 }
 
 export function fileUrl(path, w) {

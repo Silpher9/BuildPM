@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'wouter'
 import Icon from '../components/Icon.jsx'
-import { PageHead, Gate, Dim, Empty, NoteHtml } from '../components/ui.jsx'
+import { PageHead, Gate, Dim, Empty, NoteHtml, useLightbox } from '../components/ui.jsx'
 import { useApi, useAction } from '../lib/api.js'
-import { noteHref, shortDate, ago } from '../lib/format.js'
+import { noteHref, shortDate, ago, fileUrl } from '../lib/format.js'
 
 const STALE_DAYS = 60
 
@@ -81,6 +81,36 @@ export default function Knowledge() {
   )
 }
 
+function NoteLog({ entries }) {
+  const open = useLightbox()
+  return (
+    <section className="backlinks">
+      <Dim count={entries.length}>Logboek bij deze notitie</Dim>
+      {entries.map((e) => (
+        <div key={e.id} className="tl-item kind-log">
+          <div className="when">
+            {shortDate(e.date)}
+            <small>{e.time || ''}</small>
+          </div>
+          <div style={{ minWidth: 0 }}>
+            {e.heading && <span className="label">{e.heading}</span>}
+            <NoteHtml html={e.html} className="what" />
+            {e.images.length > 0 && (
+              <div className="tl-photos">
+                {e.images.map((p, i) => (
+                  <button key={p} onClick={() => open(e.images, i)} aria-label="Foto openen">
+                    <img src={fileUrl(p, 240)} alt="" loading="lazy" />
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      ))}
+    </section>
+  )
+}
+
 export function Note({ path }) {
   const state = useApi(`/api/note?path=${encodeURIComponent(path)}`)
   const act = useAction()
@@ -151,6 +181,7 @@ export function Note({ path }) {
             <div className="note-layout">
               <div style={{ minWidth: 0 }}>
                 <NoteHtml html={n.html} path={n.archived ? null : n.path} />
+                {n.log?.length > 0 && <NoteLog entries={n.log} />}
                 {n.backlinks.length > 0 && (
                   <section className="backlinks">
                     <Dim count={n.backlinks.length}>Verwijst hierheen</Dim>

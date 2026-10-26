@@ -1,7 +1,7 @@
 import { createContext, useContext, useEffect, useRef } from 'react'
 import { Link, useLocation } from 'wouter'
 import Icon from './Icon.jsx'
-import { useAction } from '../lib/api.js'
+import { useAction, useLive } from '../lib/api.js'
 import { fileUrl } from '../lib/format.js'
 
 export function PageHead({ no, title, lede, crumbs = [], children }) {
@@ -141,6 +141,7 @@ export function NoteHtml({ html, path, className = 'prose', inline = false }) {
   const [, navigate] = useLocation()
   const openLightbox = useLightbox()
   const act = useAction()
+  const { openCapture } = useLive()
 
   useEffect(() => {
     const el = ref.current
@@ -167,6 +168,23 @@ export function NoteHtml({ html, path, className = 'prose', inline = false }) {
     }
     const onChange = async (e) => {
       const box = e.target
+      if (box.matches('input[type=file][data-photo-heading]') && path) {
+        const files = [...box.files]
+        box.value = ''
+        if (files.length) openCapture?.('log', { photos: files, link: path, heading: box.dataset.photoHeading })
+        return
+      }
+      if (box.matches('input.fill') && path) {
+        const value = box.value.trim()
+        if (!value) return
+        box.disabled = true
+        try {
+          await act('/api/notes/fill', { path, line: Number(box.dataset.line), lineHash: box.dataset.lineHash, idx: Number(box.dataset.idx), value })
+        } catch {
+          box.disabled = false
+        }
+        return
+      }
       if (!box.matches('input.task') || !path) return
       box.disabled = true
       try {
@@ -177,13 +195,18 @@ export function NoteHtml({ html, path, className = 'prose', inline = false }) {
         box.disabled = false
       }
     }
+    const onKey = (e) => {
+      if (e.key === 'Enter' && e.target.matches('input.fill')) e.target.blur()
+    }
     el.addEventListener('click', onClick)
     el.addEventListener('change', onChange)
+    el.addEventListener('keydown', onKey)
     return () => {
       el.removeEventListener('click', onClick)
       el.removeEventListener('change', onChange)
+      el.removeEventListener('keydown', onKey)
     }
-  }, [navigate, openLightbox, act, path])
+  }, [navigate, openLightbox, act, path, openCapture])
 
   const Tag = inline ? 'span' : 'div'
   return <Tag ref={ref} className={className} dangerouslySetInnerHTML={{ __html: html }} />

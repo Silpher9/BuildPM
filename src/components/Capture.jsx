@@ -13,7 +13,7 @@ const KINDS = [
   { key: 'buy', label: 'Aankoop', hint: 'Komt in voorraad & kosten.' },
 ]
 
-export default function Capture({ onClose, initial = 'log' }) {
+export default function Capture({ onClose, initial = 'log', photos: initialPhotos = [], link: initialLink = '', heading = '' }) {
   const [kind, setKind] = useState(initial)
   const [text, setText] = useState('')
   const [extra, setExtra] = useState('')
@@ -22,16 +22,19 @@ export default function Capture({ onClose, initial = 'log' }) {
   const [amount, setAmount] = useState('')
   const [cost, setCost] = useState('')
   const [status, setStatus] = useState('aanwezig')
-  const [link, setLink] = useState('')
-  const [photos, setPhotos] = useState([])
+  const [link, setLink] = useState(initialLink || '')
+  const [photos, setPhotos] = useState(() => [...initialPhotos].slice(0, 6).map((f) => ({ file: f, url: URL.createObjectURL(f) })))
   const [busy, setBusy] = useState(false)
   const fileRef = useRef(null)
+  const camRef = useRef(null)
+  const urls = useRef([])
+  urls.current = photos.map((p) => p.url)
   const act = useAction()
   const { toast } = useLive()
   const board = useApi(kind === 'task' ? '/api/board' : null)
   const links = useApi('/api/links')
 
-  useEffect(() => () => photos.forEach((p) => URL.revokeObjectURL(p.url)), [photos])
+  useEffect(() => () => urls.current.forEach((u) => URL.revokeObjectURL(u)), [])
 
   const addPhotos = (files) => {
     const list = [...files].slice(0, 6 - photos.length).map((f) => ({ file: f, url: URL.createObjectURL(f) }))
@@ -49,11 +52,11 @@ export default function Capture({ onClose, initial = 'log' }) {
           toast({ text: `${photos.length} foto${photos.length > 1 ? '’s' : ''} uploaden…` })
           const res = await uploadPhotos(
             photos.map((p) => p.file),
-            text.split(/\s+/).slice(0, 4).join(' ') || 'logboek',
+            text.split(/\s+/).slice(0, 4).join(' ') || heading || 'logboek',
           )
           images = res.paths
         }
-        await act('/api/logbook', { text, images, link: link || undefined })
+        await act('/api/logbook', { text, images, link: link || undefined, heading: link === initialLink ? heading || undefined : undefined })
       } else if (kind === 'task') {
         const linkNote = links.data?.notes.find((n) => n.path === link)
         const name = linkNote ? linkNote.path.split('/').pop().replace(/\.md$/, '') : ''
@@ -121,11 +124,24 @@ export default function Capture({ onClose, initial = 'log' }) {
                 </div>
               ))}
               {photos.length < 6 && (
-                <button type="button" className="btn ghost" onClick={() => fileRef.current?.click()}>
-                  <Icon name="camera" size={16} /> Foto
-                </button>
+                <>
+                  <button type="button" className="btn mark" onClick={() => camRef.current?.click()}>
+                    <Icon name="camera" size={16} /> Camera
+                  </button>
+                  <button type="button" className="btn ghost" onClick={() => fileRef.current?.click()}>
+                    Uit galerij
+                  </button>
+                </>
               )}
-              <input ref={fileRef} type="file" accept="image/*" multiple hidden onChange={(e) => addPhotos(e.target.files)} />
+              <input
+                ref={camRef}
+                type="file"
+                accept="image/*"
+                capture="environment"
+                hidden
+                onChange={(e) => (addPhotos(e.target.files), (e.target.value = ''))}
+              />
+              <input ref={fileRef} type="file" accept="image/*" multiple hidden onChange={(e) => (addPhotos(e.target.files), (e.target.value = ''))} />
             </div>
           </div>
         )}
@@ -147,6 +163,11 @@ export default function Capture({ onClose, initial = 'log' }) {
           </label>
         )}
 
+        {heading && link === initialLink && kind === 'log' && (
+          <p className="chips" style={{ margin: 0 }}>
+            <span className="chip mark">Bij: {heading}</span>
+          </p>
+        )}
         {(kind === 'log' || kind === 'task') && (
           <label className="field">
             <span>Hoort bij (optioneel)</span>

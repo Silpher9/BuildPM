@@ -8,7 +8,7 @@ import { insertRow, updateCell, findTable } from './md/tables.js'
 import { setTask } from './md/tasks.js'
 import { closeQuestion } from './md/questions.js'
 import { questions, INVENTORY_STATES } from './domain.js'
-import { today, nowTime, HttpError, slugify, latestDate } from './util.js'
+import { today, nowTime, HttpError, slugify, latestDate, hash } from './util.js'
 import { splitFrontmatter } from './md/frontmatter.js'
 
 const F = config.files
@@ -108,6 +108,26 @@ export function toggleTask(vault, { path, line, taskId, done }) {
     label: done ? 'Afgevinkt' : 'Vinkje weggehaald',
   })
   return { label: done ? 'Afgevinkt' : 'Vinkje weggehaald' }
+}
+
+/** Write a value into the n-th `____` placeholder of a line. */
+export function fillField(text, { line, lineHash, idx, value }) {
+  const lines = text.split('\n')
+  let i = Number(line)
+  if (!(lines[i] !== undefined && hash(lines[i]) === lineHash)) i = lines.findIndex((l) => hash(l) === lineHash)
+  if (i < 0) throw new HttpError(409, 'Regel niet gevonden; de notitie is intussen gewijzigd')
+  let n = -1
+  const clean = oneLine(value).replace(/\*/g, '').replace(/\|/g, '/')
+  if (!clean) throw new HttpError(400, 'Lege waarde')
+  const next = lines[i].replace(/_{4,}/g, (m) => (++n === Number(idx) ? `**${clean}**` : m))
+  if (next === lines[i]) throw new HttpError(409, 'Invulveld niet gevonden')
+  lines[i] = next
+  return lines.join('\n')
+}
+
+export function fillNoteField(vault, { path, ...rest }) {
+  vault.update(need(path, 'Pad ontbreekt'), (t) => fillField(t, rest), { label: 'Ingevuld' })
+  return { label: 'Ingevuld' }
 }
 
 export function markReviewed(vault, { path }) {
@@ -214,12 +234,13 @@ export function insertLogEntry(text, { date, time, body }) {
   return lines.join('\n')
 }
 
-export function addLog(vault, { text, images = [], link }) {
+export function addLog(vault, { text, images = [], link, heading }) {
   const date = today()
   const main = oneLine(text)
   if (!main && !images.length) throw new HttpError(400, 'Leeg logboekitem')
   const linkNote = link ? vault.idx.byPath.get(link) : null
-  const first = (main || 'Foto') + (linkNote ? ` → [[${linkNote.name}]]` : '')
+  const target = linkNote ? (heading ? `${linkNote.name}#${oneLine(heading).replace(/[[\]|#]/g, '')}` : linkNote.name) : null
+  const first = (main || 'Foto') + (target ? ` → [[${target}]]` : '')
   const embeds = images.map((p) => `![[${p.split('/').pop()}]]`)
   vault.update(F.logbook, (t) => insertLogEntry(t || LOGBOOK_TEMPLATE(date), { date, time: nowTime(), body: [first, ...embeds] }), {
     create: true,

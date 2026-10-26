@@ -4,7 +4,7 @@
 import MarkdownIt from 'markdown-it'
 import { parseWikilink } from './wikilinks.js'
 import { TASK_RE, taskHash } from './tasks.js'
-import { slugify } from '../util.js'
+import { slugify, hash } from '../util.js'
 
 const IMAGE_EXT = /\.(jpe?g|png|webp|gif|avif|svg)$/i
 
@@ -116,6 +116,91 @@ md.core.ruler.after('inline', 'anchors', (state) => {
   }
 })
 
+// Fill-in fields: `____` (4+ underscores) becomes an input that writes the value back
+// into that line. `[📷 …](buildpm:foto)` becomes a photo button for the current section,
+// followed by the photos already logged for it. Runs last, so heading ids exist.
+export const FIELD_RE = /_{4,}/g
+// A field followed by a unit, `×`, `(+0,5)` or `· verwacht 6` expects a number: small box, numeric keyboard.
+const NUMERIC_AFTER = /^\s*(?:cm|mm|m\b|°|×|x\s|\(\s*[+\-−]?\d|·\s*(?:verwacht|aangenomen)\s+(?:ca\.\s*)?[+\-−]?\d)/i
+md.core.ruler.push('fields_and_photos', (state) => {
+  const { env, tokens } = state
+  let section = null
+  const perLine = new Map() // a table row holds fields from several cells
+  for (let i = 0; i < tokens.length; i++) {
+    const tok = tokens[i]
+    if (tok.type === 'heading_open') {
+      const slug = tok.attrGet('id')
+      section = { slug, text: (env.headings || []).find((h) => h.slug === slug)?.text || '' }
+      continue
+    }
+    if (tok.type !== 'inline' || !tok.children) continue
+    // Table cells carry no source map; their row (tr_open) does.
+    let k = i - 1
+    while (k >= 0 && !tokens[k].map) k--
+    let line = (tokens[k]?.map?.[0] ?? 0) + (env.lineOffset || 0)
+    const out = []
+    for (let c = 0; c < tok.children.length; c++) {
+      const ch = tok.children[c]
+      if (ch.type === 'softbreak' || ch.type === 'hardbreak') line++
+      if (ch.type === 'link_open' && ch.attrGet('href') === 'buildpm:foto') {
+        let end = c
+        while (end < tok.children.length && tok.children[end].type !== 'link_close') end++
+        const h = new state.Token('html_inline', '', 0)
+        const photos = (section && env.sectionPhotos?.[section.slug]) || []
+        const gallery = photos
+          .flatMap((e) =>
+            e.images.map(
+              (img) =>
+                `<a class="embed-img" href="${esc(fileHref(img))}" data-lightbox="${esc(img)}" title="${esc(e.date + ' ' + (e.time || ''))}"><img src="${esc(fileHref(img, 480))}" alt="" loading="lazy"></a>`,
+            ),
+          )
+          .join('')
+        h.content =
+          `<span class="note-photo">` +
+          (env.readOnly
+            ? ''
+            : `<label class="btn small mark photo-btn">📷 Foto maken<input type="file" accept="image/*" capture="environment" multiple hidden data-photo-heading="${esc(section?.text || '')}"></label>`) +
+          (photos.length
+            ? `<span class="note-photo-count">${photos.length} logboekregel${photos.length > 1 ? 's' : ''} met foto’s</span><span class="note-photo-grid">${gallery}</span>`
+            : '') +
+          `</span>`
+        out.push(h)
+        c = end
+        continue
+      }
+      if (ch.type === 'text' && FIELD_RE.test(ch.content) && !env.readOnly) {
+        FIELD_RE.lastIndex = 0
+        const src = env.lines?.[line] ?? ''
+        let last = 0
+        for (const m of ch.content.matchAll(FIELD_RE)) {
+          if (m.index > last) {
+            const t = new state.Token('text', '', 0)
+            t.content = ch.content.slice(last, m.index)
+            out.push(t)
+          }
+          const n = perLine.get(line) || 0
+          perLine.set(line, n + 1)
+          const inp = new state.Token('html_inline', '', 0)
+          const num = NUMERIC_AFTER.test(ch.content.slice(m.index + m[0].length))
+          inp.content =
+            `<input type="text" class="fill${num ? ' num' : ''}"${num ? ' inputmode="decimal"' : ''} enterkeyhint="done" ` +
+            `data-line="${line}" data-line-hash="${hash(src)}" data-idx="${n}" placeholder="${num ? '…' : 'invullen'}" aria-label="Invullen">`
+          out.push(inp)
+          last = m.index + m[0].length
+        }
+        if (last < ch.content.length) {
+          const t = new state.Token('text', '', 0)
+          t.content = ch.content.slice(last)
+          out.push(t)
+        }
+        continue
+      }
+      out.push(ch)
+    }
+    tok.children = out
+  }
+})
+
 md.renderer.rules.table_open = () => '<div class="table-wrap"><table>\n'
 md.renderer.rules.table_close = () => '</table></div>\n'
 
@@ -138,8 +223,8 @@ export function stripComments(text) {
  * Render a note body. `lineOffset` is where `body` starts in the file and `lines`
  * are the file's lines, so checkboxes can point back at their exact source line.
  */
-export function renderNote(body, { resolve, lineOffset = 0, lines = [], readOnly = false } = {}) {
-  const env = { resolve, lineOffset, lines, readOnly }
+export function renderNote(body, { resolve, lineOffset = 0, lines = [], readOnly = false, sectionPhotos = {} } = {}) {
+  const env = { resolve, lineOffset, lines, readOnly, sectionPhotos }
   const html = md.render(stripComments(body), env)
   return { html, headings: env.headings || [] }
 }

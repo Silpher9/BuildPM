@@ -104,7 +104,7 @@ function NextStep({ next }) {
               </button>
             )}
             {card.links[0] && (
-              <button className="btn ghost" onClick={() => navigate(noteHref(card.links[0].path))}>
+              <button className="btn ghost" onClick={() => navigate(noteHref(card.links[0].path, card.links[0].heading))}>
                 <Icon name="book" size={16} /> Open
               </button>
             )}

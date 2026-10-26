@@ -134,7 +134,7 @@ export default function App() {
         setPalette(true)
       } else if (e.key === 'n' && !typing && !e.metaKey && !e.ctrlKey) {
         e.preventDefault()
-        setCapture('log')
+        setCapture({ kind: 'log' })
       }
     }
     window.addEventListener('keydown', onKey)
@@ -153,7 +153,7 @@ export default function App() {
   }, [toast])
 
   const ctx = useMemo(
-    () => ({ version: live.version, online: live.online, toast, refresh: live.bump, openCapture: (k) => setCapture(k || 'log') }),
+    () => ({ version: live.version, online: live.online, toast, refresh: live.bump, openCapture: (k, opts) => setCapture({ kind: k || 'log', ...opts }) }),
     [live.version, live.online, toast, live.bump],
   )
   const openLightbox = useCallback((items, index = 0) => setLightbox({ items, index: Math.max(0, index) }), [])
@@ -190,7 +190,7 @@ export default function App() {
               ))}
             </nav>
             <div className="side-foot">
-              <button className="btn mark" onClick={() => setCapture('log')}>
+              <button className="btn mark" onClick={() => setCapture({ kind: 'log' })}>
                 <Icon name="plus" size={16} /> Vastleggen
               </button>
               <Link href="/rondje" className="btn ghost">
@@ -209,6 +209,21 @@ export default function App() {
                   <span>BuildPM</span>
                 </span>
               </Link>
+              <label className="icon-btn camera-btn" aria-label="Foto maken">
+                <Icon name="camera" />
+                <input
+                  type="file"
+                  accept="image/*"
+                  capture="environment"
+                  multiple
+                  hidden
+                  onChange={(e) => {
+                    const files = [...e.target.files]
+                    e.target.value = ''
+                    if (files.length) setCapture({ kind: 'log', photos: files })
+                  }}
+                />
+              </label>
               <button className="icon-btn" onClick={() => setPalette(true)} aria-label="Zoeken">
                 <Icon name="search" />
               </button>
@@ -251,7 +266,7 @@ export default function App() {
               <Icon name="board" />
               Taken
             </Link>
-            <button className="capture-tab" onClick={() => setCapture('log')} aria-label="Vastleggen">
+            <button className="capture-tab" onClick={() => setCapture({ kind: 'log' })} aria-label="Vastleggen">
               <span className="capture-fab">
                 <Icon name="plus" size={24} />
               </span>
@@ -268,7 +283,7 @@ export default function App() {
         </div>
 
         {menu && <MenuSheet onClose={() => setMenu(false)} />}
-        {capture && <Capture initial={capture} onClose={() => setCapture(null)} />}
+        {capture && <Capture initial={capture.kind} photos={capture.photos} link={capture.link} heading={capture.heading} onClose={() => setCapture(null)} />}
         {palette && <Palette onClose={() => setPalette(false)} />}
         {lightbox && (
           <Lightbox
