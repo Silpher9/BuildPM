@@ -1,0 +1,8 @@
+node_modules/
+dist/
+.data/
+.env
+logs/
+*.log
+.DS_Store
+demo-vault/project/03_Projectmanagement/assets/
