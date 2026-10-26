@@ -120,6 +120,15 @@ md.core.ruler.after('inline', 'anchors', (state) => {
 // into that line. `[📷 …](buildpm:foto)` becomes a photo button for the current section,
 // followed by the photos already logged for it. Runs last, so heading ids exist.
 export const FIELD_RE = /_{4,}/g
+/**
+ * `buildpm:foto` asks for a photo of the current section; `buildpm:foto?serie=4` says a series
+ * of four (for 3D) is preferred. The link title, if any, says why.
+ */
+export function parsePhotoHref(href) {
+  const m = String(href || '').match(/^buildpm:foto(?:\?serie=(\d+))?$/)
+  return m ? { series: m[1] ? Math.min(8, Math.max(2, Number(m[1]))) : 0 } : null
+}
+
 // A field followed by a unit, `×`, `(+0,5)` or `· verwacht 6` expects a number: small box, numeric keyboard.
 const NUMERIC_AFTER = /^\s*(?:cm|mm|m\b|°|×|x\s|\(\s*[+\-−]?\d|·\s*(?:verwacht|aangenomen)\s+(?:ca\.\s*)?[+\-−]?\d)/i
 md.core.ruler.push('fields_and_photos', (state) => {
@@ -142,7 +151,8 @@ md.core.ruler.push('fields_and_photos', (state) => {
     for (let c = 0; c < tok.children.length; c++) {
       const ch = tok.children[c]
       if (ch.type === 'softbreak' || ch.type === 'hardbreak') line++
-      if (ch.type === 'link_open' && ch.attrGet('href') === 'buildpm:foto') {
+      const photoReq = ch.type === 'link_open' && parsePhotoHref(ch.attrGet('href'))
+      if (photoReq) {
         let end = c
         while (end < tok.children.length && tok.children[end].type !== 'link_close') end++
         const h = new state.Token('html_inline', '', 0)
@@ -151,15 +161,23 @@ md.core.ruler.push('fields_and_photos', (state) => {
           .flatMap((e) =>
             e.images.map(
               (img) =>
-                `<a class="embed-img" href="${esc(fileHref(img))}" data-lightbox="${esc(img)}" title="${esc(e.date + ' ' + (e.time || ''))}"><img src="${esc(fileHref(img, 480))}" alt="" loading="lazy"></a>`,
+                `<a class="embed-img${e.series ? ' in-series' : ''}" href="${esc(fileHref(img))}" data-lightbox="${esc(img)}" title="${esc(e.date + ' ' + (e.time || ''))}"><img src="${esc(fileHref(img, 480))}" alt="" loading="lazy"></a>`,
             ),
           )
           .join('')
+        // Both choices are always offered; the one Claude prefers is marked.
+        const n = photoReq.series
+        const heading = esc(section?.text || '')
+        const why = ch.attrGet('title')
         h.content =
           `<span class="note-photo">` +
           (env.readOnly
             ? ''
-            : `<label class="btn small mark photo-btn">📷 Foto maken<input type="file" accept="image/*" capture="environment" multiple hidden data-photo-heading="${esc(section?.text || '')}"></label>`) +
+            : `<span class="photo-choice">` +
+              `<label class="btn small ${n ? 'ghost' : 'mark'} photo-btn">📷 1 foto${n ? '' : ' <em>voorkeur</em>'}<input type="file" accept="image/*" capture="environment" hidden data-photo-heading="${heading}" data-series-pref="${n}"></label>` +
+              `<button type="button" class="btn small ${n ? 'mark' : 'ghost'} series-btn" data-photo-heading="${heading}" data-series="${n || 4}" data-series-pref="${n}">📷 Serie van ${n || 4}${n ? ' <em>voorkeur</em>' : ''}</button>` +
+              `</span>` +
+              (why ? `<span class="photo-why">${esc(why)}</span>` : '')) +
           (photos.length
             ? `<span class="note-photo-count">${photos.length} logboekregel${photos.length > 1 ? 's' : ''} met foto’s</span><span class="note-photo-grid">${gallery}</span>`
             : '') +

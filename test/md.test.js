@@ -309,3 +309,49 @@ describe('fill-in fields and section photos', () => {
     expect(out).toBe('x\n- A: ____ cm, B: **655** cm\n')
   })
 })
+
+describe('photo requests and series', () => {
+  it('reads the preferred kind from the photo link', async () => {
+    const { parsePhotoHref } = await import('../server/md/render.js')
+    expect(parsePhotoHref('buildpm:foto')).toEqual({ series: 0 })
+    expect(parsePhotoHref('buildpm:foto?serie=4')).toEqual({ series: 4 })
+    expect(parsePhotoHref('buildpm:foto?serie=40')).toEqual({ series: 8 })
+    expect(parsePhotoHref('https://example.com')).toBe(null)
+  })
+  it('always offers one photo and a series, marking the preferred one', () => {
+    const resolve = makeResolver([], { projectDir: 'p', isArchived: () => false })
+    const text = '## Deur\n\n[📷 Fotoserie](buildpm:foto?serie=4 "Dan kan ik de dagkant nameten")\n'
+    const { html } = renderNote(text, { resolve, lines: text.split('\n') })
+    expect(html).toContain('📷 1 foto<input')
+    expect(html).toContain('data-series="4" data-series-pref="4">📷 Serie van 4 <em>voorkeur</em>')
+    expect(html).toContain('<span class="photo-why">Dan kan ik de dagkant nameten</span>')
+    const single = renderNote('## A\n\n[📷](buildpm:foto)\n', { resolve, lines: ['## A', '', '[📷](buildpm:foto)'] }).html
+    expect(single).toContain('📷 1 foto <em>voorkeur</em>')
+    expect(single).toContain('📷 Serie van 4</button>')
+  })
+  it('tags a series in the logbook so it can be placed in 3D', async () => {
+    const { addLog } = await import('../server/actions.js')
+    let file = ''
+    const vault = { idx: { byPath: new Map([['n/Deur.md', { name: 'Deur' }]]) }, update: (_p, fn) => (file = fn(file)) }
+    addLog(vault, { text: '', images: ['a/1.jpg', 'a/2.jpg', 'a/3.jpg'], link: 'n/Deur.md', heading: '3. Deur', series: true })
+    expect(file).toMatch(/- \d\d:\d\d — Fotoserie, 3 foto’s #fotoserie → \[\[Deur#3\. Deur\]\]\n {2}!\[\[1\.jpg\]\]/)
+    file = ''
+    addLog(vault, { text: 'Los', images: ['a/1.jpg'], series: true })
+    expect(file).not.toContain('#fotoserie')
+  })
+  it('turns COLMAP poses into camera centres and back', async () => {
+    const { quatFromMat, matFromQuat, cameraInWorld, matVec } = await import('../tools/fotoserie/lib.mjs')
+    const a = 0.7
+    const R = [
+      [Math.cos(a), 0, Math.sin(a)],
+      [0, 1, 0],
+      [-Math.sin(a), 0, Math.cos(a)],
+    ]
+    const back = matFromQuat(quatFromMat(R))
+    back.flat().forEach((v, i) => expect(v).toBeCloseTo(R.flat()[i], 9))
+    const C = [1, 2, 3]
+    const t = matVec(R, C).map((v) => -v)
+    const w = cameraInWorld(quatFromMat(R), t)
+    w.center.forEach((v, i) => expect(v).toBeCloseTo(C[i], 9))
+  })
+})

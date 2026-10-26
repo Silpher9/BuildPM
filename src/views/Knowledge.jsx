@@ -4,6 +4,7 @@ import Icon from '../components/Icon.jsx'
 import { PageHead, Gate, Dim, Empty, NoteHtml, useLightbox } from '../components/ui.jsx'
 import { useApi, useAction } from '../lib/api.js'
 import { noteHref, shortDate, ago, fileUrl } from '../lib/format.js'
+import { SeriesBadge } from '../components/Series.jsx'
 
 const STALE_DAYS = 60
 
@@ -104,6 +105,7 @@ function NoteLog({ entries }) {
                 ))}
               </div>
             )}
+            <SeriesBadge series={e.series} />
           </div>
         </div>
       ))}

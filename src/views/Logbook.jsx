@@ -3,6 +3,7 @@ import { Link } from 'wouter'
 import Icon from '../components/Icon.jsx'
 import { PageHead, Gate, Empty, NoteHtml, ChapterChips, useLightbox } from '../components/ui.jsx'
 import { useApi, useLive } from '../lib/api.js'
+import { SeriesBadge } from '../components/Series.jsx'
 import { fileUrl, monthTitle, shortDate, noteHref } from '../lib/format.js'
 
 const KINDS = [
@@ -100,6 +101,7 @@ export default function Logbook() {
                         </span>
                         <NoteHtml html={t.html} className="what" />
                         <Photos images={t.images} />
+                        <SeriesBadge series={t.series} />
                         {t.chapters && (
                           <div className="chips" style={{ marginTop: 6 }}>
                             <ChapterChips chapters={t.chapters} />

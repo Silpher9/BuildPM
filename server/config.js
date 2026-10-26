@@ -26,6 +26,10 @@ export const config = {
   // Name used as the source when decisions are recorded from the dashboard.
   owner: env.OWNER_NAME || 'Eigenaar',
   dataDir: path.resolve(repoRoot, env.DATA_DIR || '.data'),
+  // Untouched originals of uploaded photos (full size, with EXIF), kept outside the vault.
+  originalsDir: path.resolve(repoRoot, env.ORIGINALS_PATH || path.join(env.DATA_DIR || '.data', 'originals')),
+  // Photo series are placed in a reference 3D model when this folder exists (see tools/fotoserie).
+  seriesReference: env.SERIES_REFERENCE ? path.resolve(repoRoot, env.SERIES_REFERENCE) : '',
   timeZone: env.TZ_PROJECT || 'Europe/Amsterdam',
   // Script that regenerates the vault manifest after the dashboard wrote something.
   // Relative to the vault root; skipped when the file does not exist.

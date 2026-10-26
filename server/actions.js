@@ -234,10 +234,12 @@ export function insertLogEntry(text, { date, time, body }) {
   return lines.join('\n')
 }
 
-export function addLog(vault, { text, images = [], link, heading }) {
+export function addLog(vault, { text, images = [], link, heading, series = false }) {
   const date = today()
-  const main = oneLine(text)
+  let main = oneLine(text)
   if (!main && !images.length) throw new HttpError(400, 'Leeg logboekitem')
+  // A series is tagged so it can be placed in the 3D model; the tag is plain Obsidian.
+  if (series && images.length > 1) main = `${main || `Fotoserie, ${images.length} foto’s`}${/#fotoserie\b/i.test(main) ? '' : ' #fotoserie'}`
   const linkNote = link ? vault.idx.byPath.get(link) : null
   const target = linkNote ? (heading ? `${linkNote.name}#${oneLine(heading).replace(/[[\]|#]/g, '')}` : linkNote.name) : null
   const first = (main || 'Foto') + (target ? ` → [[${target}]]` : '')

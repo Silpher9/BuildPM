@@ -7,7 +7,8 @@ import { parseKanban } from './md/kanban.js'
 import { findTable, rowsAsObjects } from './md/tables.js'
 import { parseTasks } from './md/tasks.js'
 import { parseQuestions } from './md/questions.js'
-import { renderNote, renderInline } from './md/render.js'
+import { renderNote, renderInline, parsePhotoHref } from './md/render.js'
+import { seriesInfo } from './series.js'
 import { wikilinksIn } from './md/wikilinks.js'
 import { today, daysBetween, latestDate, datesIn, fold, plain, hash, slugify } from './util.js'
 
@@ -443,7 +444,17 @@ export function logbook(vault) {
         .filter((l) => !l.embed)
         .map((l) => ({ path: vault.idx.resolve(l.target)?.path, heading: l.heading }))
         .filter((t) => t.path)
-      return { ...e, text: textOnly, html: html(vault, textOnly), images, links: resolveLinks(vault, textOnly), targets, id: hash(e.date + e.line + e.raw) }
+      const entry = {
+        ...e,
+        text: textOnly,
+        html: html(vault, textOnly),
+        images,
+        links: resolveLinks(vault, textOnly),
+        targets,
+        id: hash(e.date + e.line + e.raw),
+      }
+      entry.series = seriesInfo(entry)
+      return entry
     }),
   }
 }
@@ -452,7 +463,7 @@ export function logbook(vault) {
 export function timeline(vault) {
   const items = []
   for (const e of logbook(vault).entries)
-    items.push({ kind: 'log', date: e.date, time: e.time, html: e.html, images: e.images, links: e.links, id: 'l' + e.id })
+    items.push({ kind: 'log', date: e.date, time: e.time, html: e.html, images: e.images, links: e.links, series: e.series, id: 'l' + e.id })
   for (const d of decisions(vault).rows) {
     if (d.iso) items.push({ kind: 'decision', date: d.iso, html: d.decisionHtml, source: d.source, chapters: d.chapters, id: 'd' + d.id, decisionKind: d.kind })
   }
@@ -739,6 +750,39 @@ export function notesTree(vault) {
     .sort((a, b) => a.folder.localeCompare(b.folder))
 }
 
+/**
+ * Photo buttons (`buildpm:foto`) in active notes whose section has no photos yet:
+ * what Claude or a work card is still asking for, with the preferred kind (1 photo or a series).
+ */
+export function photoRequests(vault) {
+  const taken = new Set()
+  for (const e of logbook(vault).entries) {
+    if (!e.images.length) continue
+    for (const t of e.targets) taken.add(t.path + '#' + (t.heading ? slugify(t.heading, 80) : ''))
+  }
+  const out = []
+  for (const n of vault.idx.notes) {
+    if (n.archived || n.path === F.logbook) continue
+    const text = safeRead(vault, n.path)
+    if (!text || !text.includes('buildpm:foto')) continue
+    let heading = ''
+    let fenced = false
+    for (const line of text.split('\n')) {
+      if (/^\s*(```|~~~)/.test(line)) fenced = !fenced
+      if (fenced) continue
+      const h = line.match(/^#{1,6}\s+(.+?)\s*#*\s*$/)
+      if (h) heading = plain(h[1])
+      // documentation that shows the syntax in code is no request
+      for (const m of line.replace(/`[^`]*`/g, '').matchAll(/\[[^\]]*\]\((buildpm:foto[^\s)]*)(?:\s+"([^"]*)")?\)/g)) {
+        const req = parsePhotoHref(m[1])
+        if (!req || taken.has(n.path + '#' + slugify(heading, 80))) continue
+        out.push({ path: n.path, title: n.title, heading, series: req.series, reason: m[2] || null })
+      }
+    }
+  }
+  return out
+}
+
 export function note(vault, rel) {
   const n = vault.idx.byPath.get(rel)
   if (!n) return null
@@ -751,7 +795,7 @@ export function note(vault, rel) {
     for (const t of e.targets) {
       if (t.path !== rel || !t.heading || !e.images.length) continue
       const slug = slugify(t.heading, 80)
-      ;(sectionPhotos[slug] ||= []).push({ date: e.date, time: e.time, images: e.images })
+      ;(sectionPhotos[slug] ||= []).push({ date: e.date, time: e.time, images: e.images, series: !!e.series })
     }
   }
   const { html: bodyHtml, headings } = renderNote(body, {
@@ -768,6 +812,7 @@ export function note(vault, rel) {
       time: e.time,
       html: e.html,
       images: e.images,
+      series: e.series,
       heading: e.targets.find((t) => t.path === rel)?.heading || null,
     })),
     ...noteSummary(n),

@@ -7,7 +7,8 @@ import { config, ensureDirs } from './config.js'
 import { Vault } from './vault.js'
 import * as D from './domain.js'
 import * as A from './actions.js'
-import { imageFile, prepareUpload } from './images.js'
+import { imageFile, keepOriginal, prepareUpload } from './images.js'
+import { SERIES_FILES, enqueueSeries, onSeriesChange, resumeSeries, seriesDir, seriesEnabled, seriesStatus } from './series.js'
 import { HttpError } from './util.js'
 
 ensureDirs()
@@ -48,11 +49,13 @@ app.use('/api', (req, res, next) => {
 
 /** GET results are cached until the vault changes. */
 const cache = new Map()
+let seriesVersion = 0 // photo-series results live outside the vault but show up in its views
 function cached(key, fn) {
+  const version = `${vault.version}:${seriesVersion}`
   const hit = cache.get(key)
-  if (hit && hit.version === vault.version) return hit.value
+  if (hit && hit.version === version) return hit.value
   const value = fn()
-  cache.set(key, { version: vault.version, value })
+  cache.set(key, { version, value })
   if (cache.size > 200) cache.delete(cache.keys().next().value)
   return value
 }
@@ -91,6 +94,10 @@ vault.on('change', (e) => {
 setInterval(() => {
   for (const res of clients) res.write(': ping\n\n')
 }, 25000).unref()
+onSeriesChange((id) => {
+  seriesVersion++
+  for (const res of clients) res.write(`event: series\ndata: ${JSON.stringify({ id })}\n\n`)
+})
 
 // ---------------------------------------------------------------- reads
 
@@ -133,6 +140,30 @@ get('/api/design', () =>
   })),
 )
 get('/api/logbook', () => cached('logbook', () => ({ path: config.files.logbook, timeline: D.timeline(vault), entries: D.logbook(vault).entries.length })))
+get('/api/photo-requests', () => cached('photoRequests', () => ({ requests: D.photoRequests(vault), series: seriesEnabled() })))
+get('/api/series/:id', (req) => {
+  const st = seriesStatus(req.params.id)
+  if (!st) throw new HttpError(404, 'Fotoserie niet gevonden')
+  let result = null
+  try {
+    result = JSON.parse(fs.readFileSync(path.join(seriesDir(req.params.id), 'result.json'), 'utf8'))
+  } catch {
+    // not finished
+  }
+  return { ...st, result }
+})
+app.get('/api/series/:id/:file', (req, res, next) => {
+  if (!SERIES_FILES.test(req.params.file) || /[^\w.-]/.test(req.params.id)) return next(new HttpError(404, 'Niet gevonden'))
+  const f = path.join(seriesDir(req.params.id), req.params.file)
+  if (!fs.existsSync(f)) return next(new HttpError(404, 'Niet gevonden'))
+  res.type('image/jpeg').sendFile(f)
+})
+post('/api/series/retry', (b) => {
+  const e = D.logbook(vault).entries.find((x) => x.series?.id === b.id)
+  if (!e) throw new HttpError(404, 'Fotoserie niet gevonden')
+  enqueueSeries(e.images, { force: true })
+  return { label: 'Fotoserie opnieuw in de wachtrij' }
+})
 get('/api/inventory', () => cached('inventory', () => D.inventory(vault)))
 get('/api/review', () => cached('review', () => D.review(vault)))
 get('/api/search', (req) => ({ results: D.search(vault, String(req.query.q || '')) }))
@@ -173,7 +204,11 @@ post('/api/notes/fill', (b) => A.fillNoteField(vault, b))
 post('/api/status/confirm', () => A.confirmStatus(vault))
 post('/api/phases', (b) => A.setPhase(vault, b))
 post('/api/chapters/status', (b) => A.setChapterStatus(vault, b))
-post('/api/logbook', (b) => A.addLog(vault, b))
+post('/api/logbook', (b) => {
+  const res = A.addLog(vault, b)
+  if (b.series && b.images?.length > 1) enqueueSeries(b.images)
+  return res
+})
 post('/api/inventory', (b) => A.addInventory(vault, b))
 post('/api/inventory/status', (b) => A.setInventoryStatus(vault, b))
 post('/api/undo', () => {
@@ -184,7 +219,7 @@ post('/api/undo', () => {
 app.post('/api/upload', (req, res, next) => {
   let busboy
   try {
-    busboy = Busboy({ headers: req.headers, limits: { files: 6, fileSize: 30 * 1024 * 1024 } })
+    busboy = Busboy({ headers: req.headers, limits: { files: 8, fileSize: 30 * 1024 * 1024 } })
   } catch (err) {
     return next(new HttpError(400, 'Ongeldige upload'))
   }
@@ -204,9 +239,11 @@ app.post('/api/upload', (req, res, next) => {
         stream.on('end', async () => {
           try {
             if (!/^image\//.test(info.mimeType)) throw new HttpError(400, 'Alleen foto’s zijn toegestaan')
-            const buf = await prepareUpload(Buffer.concat(chunks))
+            const raw = Buffer.concat(chunks)
+            const buf = await prepareUpload(raw)
             const name = A.assetName('foto.jpg', hint)
             const rel = A.assetPath(name)
+            keepOriginal(raw, name, info.filename)
             vault.writeBinary(rel, buf)
             saved.push(rel)
           } catch (err) {
@@ -249,4 +286,5 @@ if (process.env.NODE_ENV === 'development') {
 app.listen(config.port, config.host, () => {
   console.log(`[buildpm] ${config.projectRoot}`)
   console.log(`[buildpm] http://${config.host}:${config.port}`)
+  if (seriesEnabled()) resumeSeries(D.logbook(vault).entries)
 })

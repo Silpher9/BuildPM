@@ -89,7 +89,7 @@ export function ChapterChips({ chapters = [] }) {
 export const LightboxContext = createContext(() => {})
 export const useLightbox = () => useContext(LightboxContext)
 
-export function Lightbox({ items, index, onClose, onMove }) {
+export function Lightbox({ items, index, onClose, onMove, raw = false }) {
   useEffect(() => {
     const onKey = (e) => {
       if (e.key === 'Escape') onClose()
@@ -103,7 +103,7 @@ export function Lightbox({ items, index, onClose, onMove }) {
   if (!item) return null
   return (
     <div className="lightbox" role="dialog" aria-modal="true" aria-label="Afbeelding" onClick={onClose}>
-      <img src={fileUrl(item, 1800)} alt={item.split('/').pop()} onClick={(e) => e.stopPropagation()} />
+      <img src={raw ? item : fileUrl(item, 1800)} alt={item.split('/').pop()} onClick={(e) => e.stopPropagation()} />
       <div className="bar" onClick={(e) => e.stopPropagation()}>
         <span className="name">{item.split('/').pop()}</span>
         {items.length > 1 && (
@@ -119,7 +119,7 @@ export function Lightbox({ items, index, onClose, onMove }) {
             </button>
           </>
         )}
-        <a className="btn ghost small" href={fileUrl(item)} target="_blank" rel="noreferrer">
+        <a className="btn ghost small" href={raw ? item : fileUrl(item)} target="_blank" rel="noreferrer">
           Origineel
         </a>
         <button className="btn ghost small" onClick={onClose} aria-label="Sluiten">
@@ -147,6 +147,12 @@ export function NoteHtml({ html, path, className = 'prose', inline = false }) {
     const el = ref.current
     if (!el) return
     const onClick = (e) => {
+      const sb = e.target.closest('button.series-btn')
+      if (sb && path) {
+        const pref = Number(sb.dataset.seriesPref) || 0
+        openCapture?.('log', { link: path, heading: sb.dataset.photoHeading, series: Number(sb.dataset.series) || 4, pref })
+        return
+      }
       const a = e.target.closest('a')
       if (!a || e.defaultPrevented || e.metaKey || e.ctrlKey) return
       if (a.dataset.lightbox) {
@@ -171,7 +177,8 @@ export function NoteHtml({ html, path, className = 'prose', inline = false }) {
       if (box.matches('input[type=file][data-photo-heading]') && path) {
         const files = [...box.files]
         box.value = ''
-        if (files.length) openCapture?.('log', { photos: files, link: path, heading: box.dataset.photoHeading })
+        const pref = Number(box.dataset.seriesPref) || 0
+        if (files.length) openCapture?.('log', { photos: files, link: path, heading: box.dataset.photoHeading, series: 0, pref })
         return
       }
       if (box.matches('input.fill') && path) {

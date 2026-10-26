@@ -32,6 +32,7 @@ function useLiveVersion() {
         setVersion((v) => Math.max(v, JSON.parse(e.data).version) + 0.001)
       })
       es.addEventListener('change', (e) => setVersion(JSON.parse(e.data).version))
+      es.addEventListener('series', () => setVersion((v) => v + 0.0001))
       es.onerror = () => {
         setOnline(false)
         es.close()
@@ -156,7 +157,7 @@ export default function App() {
     () => ({ version: live.version, online: live.online, toast, refresh: live.bump, openCapture: (k, opts) => setCapture({ kind: k || 'log', ...opts }) }),
     [live.version, live.online, toast, live.bump],
   )
-  const openLightbox = useCallback((items, index = 0) => setLightbox({ items, index: Math.max(0, index) }), [])
+  const openLightbox = useCallback((items, index = 0, opts = {}) => setLightbox({ items, index: Math.max(0, index), raw: !!opts.raw }), [])
 
   if (needPin) return <PinScreen onDone={() => (setNeedPin(false), live.bump())} />
 
@@ -283,12 +284,23 @@ export default function App() {
         </div>
 
         {menu && <MenuSheet onClose={() => setMenu(false)} />}
-        {capture && <Capture initial={capture.kind} photos={capture.photos} link={capture.link} heading={capture.heading} onClose={() => setCapture(null)} />}
+        {capture && (
+          <Capture
+            initial={capture.kind}
+            photos={capture.photos}
+            link={capture.link}
+            heading={capture.heading}
+            series={capture.series}
+            pref={capture.pref}
+            onClose={() => setCapture(null)}
+          />
+        )}
         {palette && <Palette onClose={() => setPalette(false)} />}
         {lightbox && (
           <Lightbox
             items={lightbox.items}
             index={lightbox.index}
+            raw={lightbox.raw}
             onClose={() => setLightbox(null)}
             onMove={(d) => setLightbox((l) => ({ ...l, index: (l.index + d + l.items.length) % l.items.length }))}
           />
